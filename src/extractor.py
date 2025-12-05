@@ -7,6 +7,8 @@ from sklearn.decomposition import PCA
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import kneighbors_graph
+import umap
+import matplotlib.pyplot as plt
 
 from .utils import BaseExtractor
 
@@ -22,11 +24,12 @@ class LeidenRepresentativeSelector(BaseExtractor):
     なお、start_indexとend_indexは前処理に使用する列の範囲を指定するためのものである
     例えば、start_index=1, end_index=Noneとすると、1列目以降の全ての列が前処理に使用される 
     """
-    def __init__(self, n_neighbors: int=10, resolution: float=1.0):
+    def __init__(self, n_neighbors: int=10, resolution: float=1.0, pca_threshold: float=0.9):
         self.n_neighbors = n_neighbors
         self.resolution = resolution
+        self.pca_threshold = pca_threshold
 
-    def preprocess(self, data: pd.DataFrame, start_index: int=0, end_index: int=None, pca_threshold: float=0.9):
+    def preprocess(self, data: pd.DataFrame, start_index: int=0, end_index: int=None):
         """
         クラスタリングに供するにあたっての前処理を担当する
         データ丸ごとを受け取る必要はないかも、
@@ -59,7 +62,7 @@ class LeidenRepresentativeSelector(BaseExtractor):
 
             cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
 
-            n_components = np.where(cumulative_variance >= pca_threshold)[0]
+            n_components = np.where(cumulative_variance >= self.pca_threshold)[0]
             if len(n_components) == 0:
                 n_components = data_scaled.shape[1]
             else:
@@ -70,7 +73,7 @@ class LeidenRepresentativeSelector(BaseExtractor):
 
         return data_scaled
 
-    def clustering(self, data):
+    def clustering(self, data: np.ndarray, visualize: bool=False):
         """
         Leidenクラスタリングを実行し、各クラスタの代表点を選択する
         """
@@ -102,9 +105,22 @@ class LeidenRepresentativeSelector(BaseExtractor):
             representative_indices.append(representative_index)
         representative_data = data[representative_indices]
         print(f"Clustering completed: {len(unique_labels)} clusters found, {len(representative_indices)} representative points selected.")
+
+        if visualize:
+            reducer = umap.UMAP()
+            embedding = reducer.fit_transform(data)
+
+            plt.figure(figsize=(10, 6))
+            plt.scatter(embedding[:, 0], embedding[:, 1], c=labels, cmap='Spectral', s=5)
+            rep_embedding = reducer.transform(representative_data)
+            plt.scatter(rep_embedding[:, 0], rep_embedding[:, 1], c='black', s=50, marker='x', label='Representatives')
+            plt.title('Leiden Clustering with Representatives')
+            plt.legend()
+            plt.show()
+
         return representative_data, representative_indices
     
-    def fit_transform(self, data: pd.DataFrame, start_index: int=0, end_index: int=None, pca_threshold: float=0.9):
-        preprocessed_data = self.preprocess(data, start_index, end_index, pca_threshold)
-        representative_data, representative_indices = self.clustering(preprocessed_data)
+    def fit_transform(self, data: pd.DataFrame, start_index: int=0, end_index: int=None, visualize: bool=False):
+        preprocessed_data = self.preprocess(data, start_index, end_index)
+        representative_data, representative_indices = self.clustering(preprocessed_data, visualize=visualize)
         return representative_data, representative_indices

@@ -24,9 +24,10 @@ class LeidenRepresentativeSelector(BaseExtractor):
     なお、start_indexとend_indexは前処理に使用する列の範囲を指定するためのものである
     例えば、start_index=1, end_index=Noneとすると、1列目以降の全ての列が前処理に使用される 
     """
-    def __init__(self, n_neighbors: int=10, resolution: float=1.0, pca_threshold: float=0.9):
+    def __init__(self, n_neighbors: int=10, resolution: float=1.0, pca: bool=False, pca_threshold: float=0.9):
         self.n_neighbors = n_neighbors
         self.resolution = resolution
+        self.pca = pca
         self.pca_threshold = pca_threshold
 
     def preprocess(self, data: pd.DataFrame, start_index: int=0, end_index: int=None):
@@ -55,8 +56,9 @@ class LeidenRepresentativeSelector(BaseExtractor):
         scaler = StandardScaler()
         data_scaled = scaler.fit_transform(data_imputed)
 
+
         # 次元削減
-        if data_scaled.shape[1] > 1:
+        if self.pca and data_scaled.shape[1] > 1:
             pca = PCA()  
             pca.fit(data_scaled)
 

@@ -1,5 +1,9 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+import umap
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
 
 class BaseFilter():
     """
@@ -47,3 +51,50 @@ class BaseExtractor():
     def fit_transform(self):
         raise NotImplementedError
 
+class UMAPVisualizer():
+    """
+    UMAPによる可視化を行うクラス
+    主に2次元、3次元への可視化を担当する
+    """
+    def __init__(self, n_components: int=2, n_neighbors: int=15, min_dist: float=0.1):
+        self.n_components = n_components
+        self.n_neighbors = n_neighbors
+        self.min_dist = min_dist
+
+    def preprocess(self, data: pd.DataFrame, start_index: int=0, end_index: int=None):
+        
+        if end_index == None:
+            end_index = data.shape[1]
+        data_to_process = data.iloc[:, start_index:end_index]
+
+        imputer = SimpleImputer(strategy='mean')
+        data_imputed = imputer.fit_transform(data_to_process)
+
+        # 標準化
+        scaler = StandardScaler()
+        data_scaled = scaler.fit_transform(data_imputed)
+
+        return data_scaled
+
+    def fit_transform(self, data: pd.DataFrame, start_index: int=0, end_index: int=None):
+        """
+        UMAPによる次元削減と可視化を行う
+        """
+        labels = data["COMPOUND_NAME"].tolist()
+        unique_elements = sorted(list(set(labels)))
+
+        mapping_dict = {element: i for i, element in enumerate(unique_elements)}
+        print(f"マッピング辞書: {mapping_dict}")
+
+        encoded_list = [mapping_dict[item] for item in labels]
+        labels = encoded_list
+        data = self.preprocess(data, start_index, end_index)
+        reducer = umap.UMAP(n_components=self.n_components, n_neighbors=self.n_neighbors, min_dist=self.min_dist)
+        embedding = reducer.fit_transform(data)
+        plt.figure(figsize=(10, 6))
+        plt.scatter(embedding[:, 0], embedding[:, 1], c=labels, cmap='Spectral', s=5)
+        plt.title('UMAP with compounds name')
+        plt.legend()
+        plt.show()
+
+        return embedding

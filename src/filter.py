@@ -68,3 +68,39 @@ class GaussianOutlierFilter(BaseFilter):
         
         return data[mask_series]
     
+class ConditionFilter(BaseFilter):
+    """
+    指定した条件に合致するデータを抽出するフィルタ
+    """
+    def __init__(self, condition_dict: dict, and_logic: bool=True):
+        self.condition_dict = condition_dict
+        self.and_logic = and_logic
+    
+    def fit_transform(self, data: pd.DataFrame,) -> pd.DataFrame:
+        mask_series = pd.Series(self.and_logic, index=data.index)
+
+        for label, condition in self.condition_dict.items():
+            label_mask = (data[label] == condition)
+            if self.and_logic:
+                mask_series = mask_series & label_mask
+            else:
+                mask_series = mask_series | label_mask
+        
+        print(f"Filtering completed {len(data)} -> {len(data[mask_series])}")
+        
+        return data[mask_series]
+    
+class NaNFilter(BaseFilter):
+    """
+    一定以上の個数NaNを含むデータを除外するフィルタ
+    """
+    def __init__(self, n: int=10):
+        self.n = n
+    
+    def fit_transform(self, data: pd.DataFrame,) -> pd.DataFrame:
+        initial_len = len(data)
+        filtered_data = data[data.isna().sum(axis=1) < self.n]
+        final_len = len(filtered_data)
+        print(f"Filtering completed {initial_len} -> {final_len}")
+        return filtered_data
+    

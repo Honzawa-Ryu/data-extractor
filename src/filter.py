@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import polars as pl
 import sklearn
 from statsmodels.stats import diagnostic
 from .utils import BaseFilter
@@ -89,6 +90,32 @@ class ConditionFilter(BaseFilter):
         print(f"Filtering completed {len(data)} -> {len(data[mask_series])}")
         
         return data[mask_series]
+
+class PolarsConditionFilter(BaseFilter):
+    def __init__(self, condition_dict: dict, and_logic: bool=True):
+        self.condition_dict = condition_dict
+        self.and_logic = and_logic
+
+    def fit_transform(self, data: pl.DataFrame) -> pl.DataFrame:
+        # 遅延評価式（Expression）のリストを作成
+        expressions = [pl.col(col) == val for col, val in self.condition_dict.items()]
+        
+        if not expressions:
+            return data
+
+        # 論理演算を一括適用
+        if self.and_logic:
+            # すべての条件を満たす (all_horizontal)
+            combined_condition = pl.all_horizontal(expressions)
+        else:
+            # いずれかの条件を満たす (any_horizontal)
+            combined_condition = pl.any_horizontal(expressions)
+
+        initial_len = len(data)
+        filtered_data = data.filter(combined_condition)
+        print(f"Filtering completed {initial_len} -> {len(filtered_data)}")
+        
+        return filtered_data
     
 class NaNFilter(BaseFilter):
     """
@@ -104,3 +131,20 @@ class NaNFilter(BaseFilter):
         print(f"Filtering completed {initial_len} -> {final_len}")
         return filtered_data
     
+class PolarsNaNFilter(BaseFilter):
+    def __init__(self, n: int=10):
+        self.n = n
+
+    def fit_transform(self, data: pl.DataFrame) -> pl.DataFrame:
+        # data.null_count() は列方向なので、sum_horizontal(pl.all().is_null()) を使う
+        null_counts = pl.sum_horizontal(pl.all().is_null())
+        
+        filtered_data = data.filter(null_counts < self.n)
+        
+        print(f"Filtering completed {len(data)} -> {len(filtered_data)}")
+        return filtered_data
+
+
+
+
+

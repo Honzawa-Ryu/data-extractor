@@ -31,7 +31,7 @@ class LeidenRepresentativeSelector(BaseExtractor):
         self.pca_threshold = pca_threshold
         self.strategy = strategy
 
-    def preprocess(self, data: np.ndarray):
+    def _preprocess(self, data: np.ndarray):
         """
         データの前処理を行う
         具体的には、欠損値の補完、標準化、必要に応じてPCAによる次元削減を行う
@@ -73,7 +73,7 @@ class LeidenRepresentativeSelector(BaseExtractor):
 
         return labels
     
-    def _select_representatives(self, data: np.ndarray, labels: np.ndarray):
+    def _select_representatives(self, data: np.ndarray, g: ig.Graph, labels: np.ndarray):
         """ 
         各クラスタの代表点を選択する
         """
@@ -89,8 +89,24 @@ class LeidenRepresentativeSelector(BaseExtractor):
                 cluster_center = np.mean(cluster_data, axis=0)
             elif self.strategy == 'median':
                 cluster_center = np.median(cluster_data, axis=0)
+
+            elif self.strategy == 'degree':
+                g_sub = g.subgraph(cluster_indices)
+                degrees = g_sub.degree()
+                cluster_center = np.argmax(degrees)
+
+            elif self.strategy == 'closeness':
+                g_sub = g.subgraph(cluster_indices)
+                closeness = g_sub.closeness()
+                cluster_center = np.argmax(closeness)
+
+            elif self.strategy == 'betweenness':
+                g_sub = g.subgraph(cluster_indices)
+                betweenness = g_sub.betweenness()
+                cluster_center = np.argmax(betweenness)
+
             else:
-                raise ValueError(f"Invalid strategy: {self.strategy}. Choose 'mean' or 'median'.")
+                raise ValueError(f"Invalid strategy: {self.strategy}.")
             
             distances = np.linalg.norm(cluster_data - cluster_center, axis=1)
             representative_index_within_cluster = np.argmin(distances)
@@ -101,7 +117,7 @@ class LeidenRepresentativeSelector(BaseExtractor):
         print(f"{len(representative_indices)} representative points selected.")
         return representative_indices
 
-    def visualize(self, data: np.ndarray, labels: np.ndarray, representative_indices: list):
+    def _visualize(self, data: np.ndarray, labels: np.ndarray, representative_indices: list):
         """
         UMAPを用いてクラスタリング結果と代表点を可視化する
         """
@@ -123,10 +139,10 @@ class LeidenRepresentativeSelector(BaseExtractor):
         else:
             feature_data = data.values
             
-        preprocessed_data = self.preprocess(feature_data)
+        preprocessed_data = self._preprocess(feature_data)
         g = self._make_graph(preprocessed_data)
         labels = self._clustering(g)
-        representative_indices = self._select_representatives(preprocessed_data, labels)
+        representative_indices = self._select_representatives(preprocessed_data, g, labels)
         if visualize:
-            self.visualize(preprocessed_data, labels, representative_indices)
-        return data.iloc[representative_indices], representative_indices
+            self._visualize(preprocessed_data, labels, representative_indices)
+        return data.iloc[representative_indices], representative_indices, labels

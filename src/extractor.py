@@ -1,3 +1,5 @@
+# 12/16 複数のメソッドで共通して用いる部分は一つのメソッドにまとめてもよいと思う
+
 import numpy as np
 import pandas as pd
 import igraph as ig
@@ -73,46 +75,112 @@ class LeidenRepresentativeSelector(BaseExtractor):
 
         return labels
     
+    def _value_clusters(self, data: np.ndarray, cluster_labels: np.ndarray):
+        """
+        同一物質を投与されているデータが同一クラスタにまとまっているか確認する
+        """
+        compound_labels = data["COMPOUND_NAME"].tolist()
+        unique_compounds = sorted(list(set(compound_labels)))
+        mapping_dict = {element: i for i, element in enumerate(unique_compounds)}
+        compound_indices = np.array([mapping_dict[name] for name in compound_labels])
+        compound_cluster_dict = {}
+        sum_clusters = 0
+        for compound in unique_compounds:
+            indices = np.where(compound_indices == mapping_dict[compound])[0]
+            clusters = set(cluster_labels[indices])
+            compound_cluster_dict[compound] = clusters
+            sum_clusters += len(clusters)
+            # print("Compund: %-20s, %2d, Clusters: %2d" % (compound, len(indices), len(clusters)))
+        print(f"Over_partition: {sum_clusters / len(unique_compounds):.2f}")    
+        return compound_cluster_dict
+
     def _select_representatives(self, data: np.ndarray, g: ig.Graph, labels: np.ndarray):
         """ 
-        各クラスタの代表点を選択する
+        各クラスタの代表点候補のリスト（インデックス順）を計算して辞書で返す
         """
-        # 各クラスタの代表点の選択
+        unique_labels = np.unique(labels)
+        center_list_dict = {}
+
+        for label in unique_labels:
+            # np.where はタプルを返すため [0] を指定
+            cluster_indices = np.where(labels == label)[0]
+            
+            # dataがDataFrameかndarrayかで使い分け（ここではndarray想定）
+            cluster_data = data[cluster_indices]
+
+            if self.strategy == 'mean':
+                cluster_center = np.mean(cluster_data, axis=0)
+                distances = np.linalg.norm(cluster_data - cluster_center, axis=1)
+                center_list = np.argsort(distances) # 昇順（近い順）
+
+            elif self.strategy == 'median':
+                cluster_center = np.median(cluster_data, axis=0)
+                distances = np.linalg.norm(cluster_data - cluster_center, axis=1)
+                center_list = np.argsort(distances) # 昇順
+
+            elif self.strategy in ['degree', 'closeness', 'betweenness']:
+                g_sub = g.subgraph(cluster_indices)
+                
+                if self.strategy == 'degree':
+                    scores = g_sub.degree()
+                elif self.strategy == 'closeness':
+                    scores = g_sub.closeness()
+                elif self.strategy == 'betweenness':
+                    scores = g_sub.betweenness()
+                
+                # 【重要】リストにマイナスは使えないため np.array に変換
+                center_list = np.argsort(-np.array(scores)) # 降順（スコア高い順）
+
+            else:
+                raise ValueError(f"Invalid strategy: {self.strategy}.")
+            
+            center_list_dict[label] = center_list
+
+        return center_list_dict
+
+            
+    def _check_representatives(self, data: pd.DataFrame, center_list_dict: dict, labels: np.ndarray, g_value: dict=None):
+        """
+        候補リストに基づき、g_value条件を考慮して最終的な代表点を選択する
+        """
         representative_indices = []
         unique_labels = np.unique(labels)
 
         for label in unique_labels:
             cluster_indices = np.where(labels == label)[0]
-            cluster_data = data[cluster_indices]
+            center_list = center_list_dict[label] # このクラスタ内での順位リスト(0~N-1)
 
-            if self.strategy == 'mean':
-                cluster_center = np.mean(cluster_data, axis=0)
-            elif self.strategy == 'median':
-                cluster_center = np.median(cluster_data, axis=0)
+            # --- デフォルト設定（条件に合わない場合はここに戻る）---
+            # クラスタ内1位のローカルインデックスを取得
+            top_local_index = center_list[0]
+            # 全体インデックスに変換（これを初期値とする）
+            final_representative_index = cluster_indices[top_local_index]
 
-            elif self.strategy == 'degree':
-                g_sub = g.subgraph(cluster_indices)
-                degrees = g_sub.degree()
-                cluster_center = np.argmax(degrees)
+            # --- g_value がある場合の優先選択ロジック ---
+            if g_value is not None:
+                found_flag = False
+                # クラスタサイズが10未満の場合のエラー回避
+                check_limit = min(10, len(center_list))
 
-            elif self.strategy == 'closeness':
-                g_sub = g.subgraph(cluster_indices)
-                closeness = g_sub.closeness()
-                cluster_center = np.argmax(closeness)
+                for i in range(check_limit):
+                    local_idx = center_list[i]
+                    current_global_idx = cluster_indices[local_idx]
 
-            elif self.strategy == 'betweenness':
-                g_sub = g.subgraph(cluster_indices)
-                betweenness = g_sub.betweenness()
-                cluster_center = np.argmax(betweenness)
+                    # 化合物名を取得して判定
+                    # dataはDataFrame想定
+                    compound_name = data.iloc[current_global_idx]['COMPOUND_NAME']
+                    
+                    if g_value.get(compound_name) == 1:
+                        print(f"Representative for cluster {label} selected: {i}th candidate (ID: {current_global_idx}).")
+                        final_representative_index = current_global_idx
+                        found_flag = True
+                        break
+                
+                if not found_flag:
+                    print(f"cluster {label}: No point satisfying g_value found within top {check_limit}. Selecting the top 1.")
+                    # found_flagがFalseなら、final_representative_index は初期値（1位）のままなのでOK
 
-            else:
-                raise ValueError(f"Invalid strategy: {self.strategy}.")
-            
-            distances = np.linalg.norm(cluster_data - cluster_center, axis=1)
-            representative_index_within_cluster = np.argmin(distances)
-            
-            representative_index = cluster_indices[representative_index_within_cluster]
-            representative_indices.append(representative_index)
+            representative_indices.append(final_representative_index)
 
         print(f"{len(representative_indices)} representative points selected.")
         return representative_indices
@@ -142,7 +210,19 @@ class LeidenRepresentativeSelector(BaseExtractor):
         preprocessed_data = self._preprocess(feature_data)
         g = self._make_graph(preprocessed_data)
         labels = self._clustering(g)
-        representative_indices = self._select_representatives(preprocessed_data, g, labels)
+        g_value = self._value_clusters(data, labels)
+        center_list_dict = self._select_representatives(preprocessed_data, g, labels)
+        representative_indices = self._check_representatives(data, center_list_dict, labels, g_value)
         if visualize:
             self._visualize(preprocessed_data, labels, representative_indices)
         return data.iloc[representative_indices], representative_indices, labels
+
+    def value_clusters(self, data: pd.DataFrame, feature_cols: list=None):
+        if feature_cols is not None:
+            feature_data = data[feature_cols].values
+        else:
+            feature_data = data.values
+        preprocessed_data = self._preprocess(feature_data)
+        g = self._make_graph(preprocessed_data)
+        labels = self._clustering(g)
+        return self._value_clusters(data, labels)

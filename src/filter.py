@@ -1,9 +1,9 @@
 import numpy as np
 import pandas as pd
 import polars as pl
-import sklearn
+from sklearn.preprocessing import normalize
 from statsmodels.stats import diagnostic
-from .utils import BaseFilter
+from utils import BaseFilter
 
 class GaussianOutlierFilter(BaseFilter):
     """
@@ -144,7 +144,72 @@ class PolarsNaNFilter(BaseFilter):
         print(f"Filtering completed {len(data)} -> {len(filtered_data)}")
         return filtered_data
 
+class CosSimFilter(BaseFilter):
+    """
+    データ全体のコサイン類似度の平均と標準偏差を計算し、
+    各実験群のコサイン類似度の平均が全体の平均から
+    指定された標準偏差倍数以上離れている場合にその実験群を選定するフィルタ
+    """
+    def __init__(self, criteria: float=3.0, pass_ratio: float=1.0):
+        self.criteria = criteria
+        self.pass_ratio = pass_ratio
+    
+    def _calculate_average(self, data: pd.DataFrame, feature_cols: list=None):
+        if feature_cols is not None:
+            feature_data = data[feature_cols].values
+        else:
+            feature_data = data.values
 
+        n = feature_data.shape[0]
+        X_norm = normalize(feature_data, axis=1, norm='l2')
+        sum_vector = X_norm.sum(axis=0)
+        squared_norm_sum = np.dot(sum_vector, sum_vector)
+        sum_of_similarities = squared_norm_sum - n
+        if n > 1:
+            mean_similarity = sum_of_similarities / (n * (n - 1))
+        else:
+            # データ点が1つ以下の場合は類似度を0とする
+            mean_similarity = 0.0        
+        return mean_similarity
+    
+    def _calculate_std(self, data: pd.DataFrame, feature_cols: list=None, n_samples: int=100_000):
+        if feature_cols is not None:
+            feature_data = data[feature_cols].values
+        else:
+            feature_data = data.values
+        
+        n = feature_data.shape[0]
+        X_norm = normalize(feature_data, axis=1, norm='l2')
 
+        idx_a = np.random.randint(0, n, size=n_samples)
+        idx_b = np.random.randint(0, n, size=n_samples)
+
+        mask = idx_a != idx_b
+        idx_a = idx_a[mask]
+        idx_b = idx_b[mask]
+
+        vecs_a = X_norm[idx_a]
+        vecs_b = X_norm[idx_b]
+
+        similarities = np.einsum('ij,ij->i', vecs_a, vecs_b)
+
+        variance = np.var(similarities)
+        std_dev = np.std(similarities)
+        return std_dev
+
+    def fit_transform(self, data: pd.DataFrame, feature_cols: list=None) -> pd.DataFrame:
+        mean_similarity = self._calculate_average(data, feature_cols)
+        std_dev = self._calculate_std(data, feature_cols)
+        selected_indices = []
+
+        for (exp_id, group_id), group_df in data.groupby(['EXP_ID', 'GROUP_ID']):
+            group_mean = self._calculate_average(group_df, feature_cols)
+            z_score = (group_mean - mean_similarity) / std_dev
+
+            if z_score >= self.criteria:
+                selected_indices.extend(group_df.index.tolist())
+
+        print(f"Filtering completed {len(data)} -> {len(selected_indices)}")
+        return data.loc[selected_indices]
 
 

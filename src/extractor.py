@@ -9,7 +9,7 @@ from sklearn.neighbors import kneighbors_graph
 import umap
 import matplotlib.pyplot as plt
 
-from .utils import BaseExtractor # 環境に合わせてコメントアウトを外してください
+from utils import BaseExtractor # 環境に合わせてコメントアウトを外してください
 class BaseExtractor: pass # 動作確認用のダミー
 
 class LeidenRepresentativeSelector(BaseExtractor):
@@ -128,6 +128,7 @@ class LeidenRepresentativeSelector(BaseExtractor):
 
             if g_value is not None:
                 check_limit = min(10, len(center_list))
+                found_flag = False
 
                 for i in range(check_limit):
                     local_idx = center_list[i]
@@ -138,10 +139,11 @@ class LeidenRepresentativeSelector(BaseExtractor):
                     if g_value.get(compound_name) == 1:
                         print(f"Representative for cluster {label}: Found clean compound '{compound_name}' at rank {i}")
                         final_representative_index = current_global_idx
+                        found_flag = True
                         break
                 
-                # if not found_flag:
-                print(f"Cluster {label}: No clean compound found in top {check_limit}.")
+                if not found_flag:
+                    print(f"Cluster {label}: No clean compound found in top {check_limit}.")
 
             representative_indices.append(final_representative_index)
 

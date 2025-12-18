@@ -4,7 +4,7 @@ import polars as pl
 from sklearn.preprocessing import normalize, StandardScaler
 from scipy.stats import norm
 from statsmodels.stats import diagnostic
-from .utils import BaseFilter
+from utils import BaseFilter
 
 import matplotlib.pyplot as plt
 
@@ -165,6 +165,7 @@ class CosSimFilter(BaseFilter):
         else:
             feature_data = data.values
         # L2正規化 (コサイン類似度の計算準備)
+        feature_data = StandardScaler().fit_transform(feature_data)
         return normalize(feature_data, axis=1, norm='l2')
 
     def _calculate_average(self, X_norm: np.ndarray):
@@ -231,14 +232,16 @@ class CosSimFilter(BaseFilter):
             similarities = np.einsum('ij,ij->i', vecs_a, vecs_b)
         
         #分布の大雑把な確認用、コメントアウト
-        # fig = plt.figure()
-        # ax = fig.add_subplot(1,1,1)
+        _, p_value = diagnostic.lilliefors(similarities)
+        print(f"Cosine Similarity distribution Lilliefors test p-value: {p_value:.4f}")
+        fig = plt.figure()
+        ax = fig.add_subplot(1,1,1)
 
-        # ax.hist(similarities, bins=50)
-        # ax.set_title('Cosine Similarity histogram')
-        # ax.set_xlabel('Similarity')
-        # ax.set_ylabel('Frequency')
-        # fig.show()
+        ax.hist(similarities, bins=50)
+        ax.set_title('Cosine Similarity histogram')
+        ax.set_xlabel('Similarity')
+        ax.set_ylabel('Frequency')
+        fig.show()
 
         if strategy == "IQR":
             median = np.median(similarities)

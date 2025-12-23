@@ -1,0 +1,52 @@
+_wandb:
+    value:
+        cli_version: 0.23.0
+        e:
+            axnw2mfnnd0ve6ke6sy70omgqa2npn0f:
+                codePath: /workspace/01_data-extractor/src/mop/mop_napzack.py
+                codePathLocal: mop_napzack.py
+                cpu_count: 32
+                cpu_count_logical: 64
+                cudaVersion: "13.0"
+                disk:
+                    /:
+                        total: "982240026624"
+                        used: "89127878656"
+                email: benzelongji@gmail.com
+                executable: /opt/testenv/bin/python
+                git:
+                    commit: 435eff8866ec70f61028ad0cf2f94e09fedc7b0f
+                    remote: https://github.com/Honzawa-Ryu/data-extractor.git
+                gpu: NVIDIA GeForce RTX 3090
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ampere
+                      cudaCores: 10496
+                      memoryTotal: "25769803776"
+                      name: NVIDIA GeForce RTX 3090
+                      uuid: GPU-02050c4c-2f83-122f-ca55-d76516bd5d83
+                host: 52de807de9b1
+                memory:
+                    total: "134921465856"
+                os: Linux-6.14.0-36-generic-x86_64-with-glibc2.35
+                program: /workspace/01_data-extractor/src/mop/mop_napzack.py
+                python: CPython 3.11.9
+                root: /workspace/01_data-extractor/src/mop
+                startedAt: "2025-12-23T10:01:01.339846Z"
+                writerId: axnw2mfnnd0ve6ke6sy70omgqa2npn0f
+        m: []
+        python_version: 3.11.9
+        t:
+            "1":
+                - 105
+            "2":
+                - 105
+            "3":
+                - 2
+                - 13
+            "4": 3.11.9
+            "5": 0.23.0
+            "8":
+                - 1
+            "12": 0.23.0
+            "13": linux-x86_64
